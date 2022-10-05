@@ -1,23 +1,30 @@
 import hashlib
 import json
+import requests
 from datetime import datetime
-from re import L
+from urllib.parse import urlparse
+
+from blockchain_app.app import is_valid
 
 class Blockchain:
     
     def __init__(self):
         self._chain = []
+        self.transactions = []
         self.create_block(1, '0')
+        self.nodes = set()
 
     def create_block(self, proof: int, previous_hash : str):
         block = {
             'index': len(self.chain) + 1,
             'timestamp': str(datetime.utcnow()),
             'proof': proof,
-            'previous_hash': previous_hash
+            'previous_hash': previous_hash,
+            'transactions': self.transactions
         }
+        self.transactions = []
         self.chain.append(block)
-        return block 
+        return block
 
     def retrieve_previous_block(self):
         return self.chain[-1]
@@ -62,6 +69,40 @@ class Blockchain:
             block_index += 1
             
         return True
+
+    def add_transaction(self, sender, receiver, amount):
+        self.transactions.append({
+            'sender': sender,
+            'receiver': receiver,
+            'amount': amount
+        })
+        previous_block = self.retrieve_previous_block()
+        return previous_block['index'] + 1
+
+    def add_node(self, address):
+        parsed_url = urlparse(address)
+        self.nodes.add(parsed_url.netloc)
+
+
+    def replace_chain(self):
+        network = self.nodes
+        longest_chain = None
+        max_length = len(self.chain)
+        for node in network:
+            response = requests.get(f'http://{node}/chain')
+            response_body = response.json()
+            if response.status_code == 200:
+                length = response_body['length']
+                chain = response_body['chain']
+                if length > max_length and self.is_chain_valid(chain):
+                    max_length  = length
+                    longest_chain = chain
+        
+        if longest_chain:
+            self.chain = longest_chain
+            return True
+        return False
+
 
 
     @property
